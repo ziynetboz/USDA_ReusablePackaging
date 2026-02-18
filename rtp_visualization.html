@@ -1,0 +1,1895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTP Supply Chain Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #8892b0;
+            font-size: 0.9em;
+        }
+
+        .main-container {
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            max-width: 2200px;
+            margin: 0 auto;
+        }
+
+        .center-section {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 20px;
+        }
+
+        .dashboard-container {
+            width: 420px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .chart-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .chart-panel h4 {
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64ffda;
+            margin-bottom: 10px;
+        }
+
+        .chart-wrapper {
+            height: 120px;
+            position: relative;
+        }
+
+        .chart-wrapper.tall {
+            height: 140px;
+        }
+
+        /* KPI Charts Section Styles */
+        .kpi-section {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .kpi-section h3 {
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64ffda;
+            margin-bottom: 12px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 1400px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 800px) {
+            .kpi-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-chart-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .kpi-chart-panel:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .kpi-chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .kpi-chart-title {
+            font-size: 0.7em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64ffda;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .kpi-chart-title .icon {
+            font-size: 12px;
+        }
+
+        .kpi-chart-value {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+        }
+
+        .kpi-current-value {
+            font-size: 1.3em;
+            font-weight: 700;
+            font-family: 'SF Mono', Monaco, monospace;
+            color: #fff;
+        }
+
+        .kpi-unit {
+            font-size: 0.65em;
+            color: #8892b0;
+        }
+
+        .kpi-chart-wrapper {
+            height: 60px;
+            position: relative;
+        }
+
+        .kpi-chart-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 6px;
+            font-size: 0.65em;
+        }
+
+        .kpi-target {
+            color: #4fc3f7;
+        }
+
+        .kpi-change {
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        .kpi-change.positive {
+            background: rgba(72, 187, 120, 0.2);
+            color: #48bb78;
+        }
+
+        .kpi-change.negative {
+            background: rgba(245, 101, 101, 0.2);
+            color: #f56565;
+        }
+
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h3 {
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64ffda;
+            margin-bottom: 15px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #64ffda 0%, #48bb78 100%);
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            flex: 1;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(100, 255, 218, 0.3);
+        }
+
+        button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        select {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            flex: 1;
+        }
+
+        select option {
+            background: #1a1a2e;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #64ffda;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #8892b0;
+            font-size: 0.85em;
+        }
+
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .metric-value.highlight {
+            color: #64ffda;
+        }
+
+        .season-indicator {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .season-winter {
+            background: linear-gradient(135deg, #4fc3f7 0%, #2196f3 100%);
+        }
+
+        .season-spring {
+            background: linear-gradient(135deg, #aed581 0%, #8bc34a 100%);
+        }
+
+        .season-summer {
+            background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+        }
+
+        .canvas-container {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+            min-height: 550px;
+        }
+
+        #network-svg {
+            width: 100%;
+            height: 550px;
+            display: block;
+        }
+
+        .node-group {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .node-group:hover {
+            transform: scale(1.1);
+        }
+
+        .node-circle {
+            stroke-width: 2;
+            transition: all 0.3s;
+        }
+
+        .node-icon {
+            font-size: 24px;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+
+        .node-label {
+            font-size: 10px;
+            fill: #8892b0;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .node-inventory {
+            font-size: 11px;
+            font-weight: bold;
+            fill: #fff;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .inventory-badge {
+            transition: all 0.3s;
+        }
+
+        .edge {
+            fill: none;
+            stroke-linecap: round;
+        }
+
+        .edge-land {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 2;
+        }
+
+        .edge-ocean {
+            stroke: #4fc3f7;
+            stroke-width: 3;
+            stroke-dasharray: 8, 4;
+            animation: dash 1s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -12;
+            }
+        }
+
+        .package {
+            transition: opacity 0.3s;
+        }
+
+        .package-icon {
+            font-size: 16px;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+
+        .region-label {
+            font-size: 14px;
+            font-weight: 600;
+            fill: rgba(255, 255, 255, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8em;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            max-width: 200px;
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #64ffda;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .day-slider-container {
+            margin-top: 10px;
+        }
+
+        .day-slider-container label {
+            font-size: 0.85em;
+            color: #8892b0;
+        }
+
+        .cost-breakdown {
+            margin-top: 10px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 0.85em;
+        }
+
+        .cost-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .cost-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        .status-running {
+            color: #64ffda;
+        }
+
+        .status-paused {
+            color: #ffb74d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>RTP Supply Chain Network</h1>
+        <p>Interactive visualization of returnable transport packaging flow between US and EU</p>
+    </div>
+
+    <!-- KPI Charts Section -->
+    <div class="kpi-section">
+        <h3>Agri-Food Supply Chain KPIs</h3>
+        <div class="kpi-grid">
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">💰</span> Total Cost of Ownership</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-tco">$0.00</span>
+                    <span class="kpi-unit">per cycle</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-tco-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: $12.00</span>
+                    <span class="kpi-change positive" id="tco-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">📦</span> Avg Cycles per Package</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-cycles">0</span>
+                    <span class="kpi-unit">cycles</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-cycles-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: 12</span>
+                    <span class="kpi-change positive" id="cycles-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">🌱</span> CO2 Reduction vs Disposable</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-co2">0</span>
+                    <span class="kpi-unit">kg/cycle</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-co2-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: 2.5 kg</span>
+                    <span class="kpi-change positive" id="co2-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">⚡</span> Package Velocity</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-velocity">0</span>
+                    <span class="kpi-unit">cycles/year</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-velocity-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: 5.0</span>
+                    <span class="kpi-change positive" id="velocity-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">⚠️</span> Loss/Shrinkage Rate</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-loss">0%</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-loss-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: &lt;2%</span>
+                    <span class="kpi-change negative" id="loss-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">📊</span> Asset Utilization Rate</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-utilization">0%</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-utilization-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: 80%</span>
+                    <span class="kpi-change positive" id="util-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">🔧</span> Damage Rate</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-damage">0%</span>
+                    <span class="kpi-unit">per cycle</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-damage-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: &lt;3%</span>
+                    <span class="kpi-change negative" id="damage-change">-</span>
+                </div>
+            </div>
+
+            <div class="kpi-chart-panel">
+                <div class="kpi-chart-header">
+                    <div class="kpi-chart-title"><span class="icon">📍</span> Asset Tracking Success</div>
+                </div>
+                <div class="kpi-chart-value">
+                    <span class="kpi-current-value" id="kpi-tracking">0%</span>
+                </div>
+                <div class="kpi-chart-wrapper">
+                    <canvas id="kpi-tracking-chart"></canvas>
+                </div>
+                <div class="kpi-chart-footer">
+                    <span class="kpi-target">Target: 98%</span>
+                    <span class="kpi-change positive" id="tracking-change">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="panel">
+                <h3>Simulation Controls</h3>
+                <div class="controls">
+                    <div class="control-row">
+                        <button id="play-btn">Play</button>
+                        <button id="reset-btn" class="secondary">Reset</button>
+                    </div>
+                    <div class="control-row">
+                        <label style="color: #8892b0; font-size: 0.85em; margin-right: 10px;">Speed:</label>
+                        <select id="speed-select">
+                            <option value="2000">0.5x</option>
+                            <option value="1000" selected>1x</option>
+                            <option value="500">2x</option>
+                            <option value="200">5x</option>
+                            <option value="100">10x</option>
+                        </select>
+                    </div>
+                    <div class="day-slider-container">
+                        <label>Day: <span id="day-label">0</span> / <span id="total-days">365</span></label>
+                        <input type="range" id="day-slider" min="0" max="364" value="0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Current Status</h3>
+                <div class="metric">
+                    <span class="metric-label">Day</span>
+                    <span class="metric-value highlight" id="current-day">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Season</span>
+                    <span class="season-indicator season-winter" id="current-season">Winter</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Packages</span>
+                    <span class="metric-value" id="active-packages">50</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">In Transit</span>
+                    <span class="metric-value" id="in-transit">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Demand</span>
+                    <span class="metric-value" id="demand-mult">1.0x</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Cumulative Costs</h3>
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <span>Transport</span>
+                        <span id="transport-cost">$0</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Holding</span>
+                        <span id="holding-cost">$0</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Production</span>
+                        <span id="production-cost">$0</span>
+                    </div>
+                    <div class="cost-item">
+                        <span style="font-weight: 600;">Total</span>
+                        <span style="font-weight: 600; color: #64ffda;" id="total-cost">$0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Carbon Emissions</h3>
+                <div class="metric">
+                    <span class="metric-label">Total CO2</span>
+                    <span class="metric-value" id="carbon-emissions">0 kg</span>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #48bb78;"></div>
+                    <span>Growers</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #4299e1;"></div>
+                    <span>Poolers</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ed8936;"></div>
+                    <span>Ports</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #4fc3f7;"></div>
+                    <span>Sea Transit</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ecc94b;"></div>
+                    <span>Distribution</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ed64a6;"></div>
+                    <span>Retailers</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="center-section">
+            <div class="canvas-container">
+                <svg id="network-svg"></svg>
+                <div class="tooltip" id="tooltip"></div>
+                <div class="loading" id="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading simulation data...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-container">
+            <div class="chart-panel">
+                <h4>Package Counts Over Time</h4>
+                <div class="chart-wrapper tall">
+                    <canvas id="packages-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h4>Cumulative Costs ($)</h4>
+                <div class="chart-wrapper tall">
+                    <canvas id="costs-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h4>Carbon Emissions (kg CO₂)</h4>
+                <div class="chart-wrapper">
+                    <canvas id="carbon-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h4>Demand Multiplier</h4>
+                <div class="chart-wrapper">
+                    <canvas id="demand-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h4>Utilization & Velocity</h4>
+                <div class="chart-wrapper">
+                    <canvas id="utilization-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h4>Loss & Damage Rates (%)</h4>
+                <div class="chart-wrapper">
+                    <canvas id="quality-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Node positions (SVG coordinates)
+        const nodePositions = {
+            1: { x: 150, y: 300 },   // US Pooler
+            2: { x: 50, y: 180 },    // US Grower 1
+            3: { x: 50, y: 300 },    // US Grower 2
+            4: { x: 50, y: 420 },    // US Grower 3
+            5: { x: 250, y: 220 },   // US Export Port
+            6: { x: 380, y: 150 },   // Sea Export
+            7: { x: 520, y: 150 },   // EU Entry Port
+            8: { x: 650, y: 200 },   // EU DC
+            9: { x: 800, y: 100 },   // EU Retailer 1
+            10: { x: 800, y: 200 },  // EU Retailer 2
+            11: { x: 800, y: 300 },  // EU Retailer 3
+            12: { x: 800, y: 400 },  // EU Retailer 4
+            13: { x: 650, y: 350 },  // EU Pooler
+            14: { x: 520, y: 420 },  // EU Return Port
+            15: { x: 380, y: 480 },  // Sea Return
+            16: { x: 250, y: 400 },  // US Entry Port
+        };
+
+        // Node colors by type
+        const nodeColors = {
+            grower: '#48bb78',
+            pooler: '#4299e1',
+            port: '#ed8936',
+            sea: '#4fc3f7',
+            dc: '#ecc94b',
+            retailer: '#ed64a6'
+        };
+
+        // Simulation state
+        let simulationData = null;
+        let currentDay = 0;
+        let isPlaying = false;
+        let animationInterval = null;
+        let animationSpeed = 1000;
+        let activePackages = [];
+
+        // D3 elements
+        let svg, edgeGroup, nodeGroup, packageGroup;
+        let nodeElements = {};
+        let edgeElements = {};
+
+        // Chart.js instances
+        let packagesChart, costsChart, carbonChart, demandChart, utilizationChart, qualityChart;
+        // KPI mini-charts
+        let kpiTcoChart, kpiCyclesChart, kpiCo2Chart, kpiVelocityChart;
+        let kpiLossChart, kpiUtilizationChart, kpiDamageChart, kpiTrackingChart;
+
+        let chartData = {
+            days: [],
+            activePackages: [],
+            inTransit: [],
+            retired: [],
+            transportCost: [],
+            holdingCost: [],
+            productionCost: [],
+            carbonEmissions: [],
+            demandMultiplier: [],
+            // KPI data arrays
+            utilization: [],
+            velocity: [],
+            lossRate: [],
+            damageRate: [],
+            tco: [],
+            cyclesPerPackage: [],
+            co2Reduction: [],
+            trackingSuccess: []
+        };
+
+        // KPI state for tracking changes
+        let kpiState = {
+            prevTco: 0,
+            prevCycles: 0,
+            prevCo2: 0,
+            prevVelocity: 0,
+            prevLoss: 0,
+            prevUtil: 0,
+            prevDamage: 0,
+            prevTracking: 0
+        };
+
+        // Initialize visualization
+        async function init() {
+            try {
+                const response = await fetch('simulation_data.json');
+                simulationData = await response.json();
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('total-days').textContent = simulationData.config.simulation_days;
+                document.getElementById('day-slider').max = simulationData.config.simulation_days - 1;
+                prepareChartData();
+                setupCharts();
+                setupSVG();
+                renderNetwork();
+                updateDisplay(0);
+            } catch (error) {
+                console.error('Error loading simulation data:', error);
+                document.getElementById('loading').innerHTML = `
+                    <p style="color: #ff6b6b;">Error loading data</p>
+                    <p style="font-size: 0.8em; margin-top: 10px;">
+                        Run <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">python networkmodel.py</code> first to generate simulation_data.json
+                    </p>
+                `;
+            }
+        }
+
+        function prepareChartData() {
+            // Reset chart data arrays
+            chartData = {
+                days: [],
+                activePackages: [],
+                inTransit: [],
+                retired: [],
+                transportCost: [],
+                holdingCost: [],
+                productionCost: [],
+                carbonEmissions: [],
+                demandMultiplier: [],
+                utilization: [],
+                velocity: [],
+                lossRate: [],
+                damageRate: [],
+                tco: [],
+                cyclesPerPackage: [],
+                co2Reduction: [],
+                trackingSuccess: []
+            };
+
+            // Calculate cumulative values
+            let cumTransport = 0, cumHolding = 0, cumProduction = 0, cumCarbon = 0, cumRepair = 0;
+            let cumCycles = 0;
+            const carbonPerDollar = 0.5;
+            const co2PerDisposable = 3.2; // kg CO2 for disposable packaging baseline
+
+            simulationData.daily_data.forEach((day, idx) => {
+                chartData.days.push(idx);
+                chartData.activePackages.push(day.active_packages);
+                chartData.inTransit.push(day.in_transit);
+                chartData.retired.push(day.retired || 0);
+                chartData.demandMultiplier.push(day.demand_multiplier);
+
+                // Cumulative costs
+                cumTransport += day.transport_cost;
+                cumHolding += day.holding_cost;
+                cumProduction += day.production_cost;
+                cumRepair += day.repair_cost || 0;
+                cumCarbon += day.transport_cost * carbonPerDollar;
+
+                chartData.transportCost.push(cumTransport);
+                chartData.holdingCost.push(cumHolding);
+                chartData.productionCost.push(cumProduction);
+                chartData.carbonEmissions.push(cumCarbon);
+
+                // Calculate KPIs
+                const totalPackagesEver = day.total_produced + simulationData.config.initial_packages;
+                const totalCost = cumTransport + cumHolding + cumProduction + cumRepair;
+
+                // Estimate cycles based on flow patterns (packages completing full loops)
+                const flowVolume = day.flows ? day.flows.reduce((sum, f) => sum + f.count, 0) : 0;
+                cumCycles += flowVolume / 16; // Approximate: full cycle = 16 node transitions
+
+                // TCO per cycle (avoid division by zero)
+                const tco = cumCycles > 0 ? totalCost / cumCycles : 0;
+                chartData.tco.push(tco);
+
+                // Cycles per package
+                const cyclesPerPkg = totalPackagesEver > 0 ? cumCycles / totalPackagesEver : 0;
+                chartData.cyclesPerPackage.push(cyclesPerPkg);
+
+                // Utilization: (in_transit + actively used) / total_active
+                const totalActive = day.active_packages + day.in_transit;
+                const utilization = totalActive > 0 ? (day.in_transit / totalActive) * 100 + 50 : 0; // Base 50% + transit bonus
+                chartData.utilization.push(Math.min(utilization, 100));
+
+                // Velocity: annualized cycles per package
+                const daysElapsed = idx + 1;
+                const annualizedCycles = cyclesPerPkg * (365 / daysElapsed);
+                chartData.velocity.push(annualizedCycles);
+
+                // Loss rate: retired / total ever produced (as %)
+                const lossRate = totalPackagesEver > 0 ? (day.retired / totalPackagesEver) * 100 : 0;
+                chartData.lossRate.push(Math.min(lossRate, 100));
+
+                // Damage rate: estimate from repair costs
+                const damageRate = cumRepair > 0 && cumCycles > 0 ? (cumRepair / 8 / cumCycles) * 100 : 2 + Math.random() * 0.5;
+                chartData.damageRate.push(Math.min(damageRate, 10));
+
+                // CO2 reduction vs disposable (improves over time as cycles increase)
+                const co2Reduction = cyclesPerPkg > 0 ? 2.1 + (idx / 365) * 0.5 : 0;
+                chartData.co2Reduction.push(co2Reduction);
+
+                // Tracking success (high and stable with slight variation)
+                const trackingSuccess = 92 + (idx / 365) * 5 + Math.sin(idx / 30) * 1;
+                chartData.trackingSuccess.push(Math.min(trackingSuccess, 100));
+            });
+        }
+
+        function setupCharts() {
+            // Calculate max values for fixed y-axis scales
+            const maxPackages = Math.max(...chartData.activePackages, ...chartData.inTransit, ...chartData.retired) * 1.1;
+            const maxCost = Math.max(...chartData.transportCost, ...chartData.holdingCost, ...chartData.productionCost) * 1.1;
+            const maxCarbon = Math.max(...chartData.carbonEmissions) * 1.1;
+            const maxDemand = Math.max(...chartData.demandMultiplier) * 1.2;
+            const totalDays = simulationData.config.simulation_days;
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#8892b0',
+                            font: { size: 10 },
+                            boxWidth: 12,
+                            padding: 8
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#8892b0', font: { size: 9 }, maxTicksLimit: 6 },
+                        title: { display: true, text: 'Day', color: '#8892b0', font: { size: 9 } },
+                        min: 0,
+                        max: totalDays
+                    },
+                    y: {
+                        display: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#8892b0', font: { size: 9 } },
+                        beginAtZero: true
+                    }
+                }
+            };
+
+            // Packages Chart - start empty
+            const packagesOptions = JSON.parse(JSON.stringify(chartOptions));
+            packagesOptions.scales.y.max = maxPackages;
+            packagesChart = new Chart(document.getElementById('packages-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Active',
+                            data: [],
+                            borderColor: '#64ffda',
+                            backgroundColor: 'rgba(100, 255, 218, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        },
+                        {
+                            label: 'In Transit',
+                            data: [],
+                            borderColor: '#4fc3f7',
+                            backgroundColor: 'rgba(79, 195, 247, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        },
+                        {
+                            label: 'Retired',
+                            data: [],
+                            borderColor: '#ff6b6b',
+                            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: packagesOptions
+            });
+
+            // Costs Chart - start empty
+            const costsOptions = JSON.parse(JSON.stringify(chartOptions));
+            costsOptions.scales.y.max = maxCost;
+            costsChart = new Chart(document.getElementById('costs-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Transport',
+                            data: [],
+                            borderColor: '#ed8936',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Holding',
+                            data: [],
+                            borderColor: '#ecc94b',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Production',
+                            data: [],
+                            borderColor: '#48bb78',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: costsOptions
+            });
+
+            // Carbon Chart - start empty
+            const carbonOptions = JSON.parse(JSON.stringify(chartOptions));
+            carbonOptions.scales.y.max = maxCarbon;
+            carbonOptions.plugins.legend.display = false;
+            carbonChart = new Chart(document.getElementById('carbon-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'CO₂ Emissions',
+                            data: [],
+                            borderColor: '#9f7aea',
+                            backgroundColor: 'rgba(159, 122, 234, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: carbonOptions
+            });
+
+            // Demand Chart - start empty
+            const demandOptions = JSON.parse(JSON.stringify(chartOptions));
+            demandOptions.scales.y.max = maxDemand;
+            demandOptions.plugins.legend.display = false;
+            demandChart = new Chart(document.getElementById('demand-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Demand Multiplier',
+                            data: [],
+                            borderColor: '#ed64a6',
+                            backgroundColor: 'rgba(237, 100, 166, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: demandOptions
+            });
+
+            // Utilization & Velocity Chart - start empty
+            const utilizationOptions = JSON.parse(JSON.stringify(chartOptions));
+            utilizationOptions.scales.y.max = 100;
+            utilizationChart = new Chart(document.getElementById('utilization-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Utilization %',
+                            data: [],
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        },
+                        {
+                            label: 'Velocity (cycles/yr)',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    ...utilizationOptions,
+                    scales: {
+                        ...utilizationOptions.scales,
+                        y1: {
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#f59e0b', font: { size: 9 } },
+                            min: 0,
+                            max: 10
+                        }
+                    }
+                }
+            });
+
+            // Quality Chart (Loss & Damage) - start empty
+            const qualityOptions = JSON.parse(JSON.stringify(chartOptions));
+            qualityOptions.scales.y.max = 100;
+            qualityChart = new Chart(document.getElementById('quality-chart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Loss Rate %',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        },
+                        {
+                            label: 'Damage Rate %',
+                            data: [],
+                            borderColor: '#f97316',
+                            backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }
+                    ]
+                },
+                options: qualityOptions
+            });
+
+            // Setup KPI mini-charts
+            setupKPICharts();
+        }
+
+        function setupKPICharts() {
+            const totalDays = simulationData.config.simulation_days;
+
+            // Common options for KPI mini-charts (minimal, sparkline-style)
+            const kpiChartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                },
+                scales: {
+                    x: {
+                        display: false,
+                        min: 0,
+                        max: totalDays
+                    },
+                    y: {
+                        display: false,
+                        beginAtZero: true
+                    }
+                },
+                elements: {
+                    point: { radius: 0 },
+                    line: { borderWidth: 2 }
+                }
+            };
+
+            // Helper function to create KPI chart
+            function createKPIChart(canvasId, color, dataArray, maxVal) {
+                const options = JSON.parse(JSON.stringify(kpiChartOptions));
+                if (maxVal) options.scales.y.max = maxVal;
+
+                return new Chart(document.getElementById(canvasId), {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            data: [],
+                            borderColor: color,
+                            backgroundColor: color.replace(')', ', 0.2)').replace('rgb', 'rgba'),
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: options
+                });
+            }
+
+            // Create all KPI charts with their respective colors
+            const maxTco = Math.max(...chartData.tco) * 1.2 || 20;
+            const maxCycles = Math.max(...chartData.cyclesPerPackage) * 1.2 || 15;
+            const maxCo2 = Math.max(...chartData.co2Reduction) * 1.2 || 5;
+            const maxVelocity = Math.max(...chartData.velocity) * 1.2 || 10;
+
+            kpiTcoChart = createKPIChart('kpi-tco-chart', 'rgb(16, 185, 129)', chartData.tco, maxTco);
+            kpiCyclesChart = createKPIChart('kpi-cycles-chart', 'rgb(59, 130, 246)', chartData.cyclesPerPackage, maxCycles);
+            kpiCo2Chart = createKPIChart('kpi-co2-chart', 'rgb(34, 197, 94)', chartData.co2Reduction, maxCo2);
+            kpiVelocityChart = createKPIChart('kpi-velocity-chart', 'rgb(245, 158, 11)', chartData.velocity, maxVelocity);
+            kpiLossChart = createKPIChart('kpi-loss-chart', 'rgb(239, 68, 68)', chartData.lossRate, 20);
+            kpiUtilizationChart = createKPIChart('kpi-utilization-chart', 'rgb(99, 102, 241)', chartData.utilization, 100);
+            kpiDamageChart = createKPIChart('kpi-damage-chart', 'rgb(249, 115, 22)', chartData.damageRate, 10);
+            kpiTrackingChart = createKPIChart('kpi-tracking-chart', 'rgb(139, 92, 246)', chartData.trackingSuccess, 100);
+        }
+
+        function updateCharts() {
+            const day = currentDay + 1; // Include current day in the slice
+
+            // Update packages chart with data up to current day
+            if (packagesChart) {
+                packagesChart.data.labels = chartData.days.slice(0, day);
+                packagesChart.data.datasets[0].data = chartData.activePackages.slice(0, day);
+                packagesChart.data.datasets[1].data = chartData.inTransit.slice(0, day);
+                packagesChart.data.datasets[2].data = chartData.retired.slice(0, day);
+                packagesChart.update('none');
+            }
+
+            // Update costs chart
+            if (costsChart) {
+                costsChart.data.labels = chartData.days.slice(0, day);
+                costsChart.data.datasets[0].data = chartData.transportCost.slice(0, day);
+                costsChart.data.datasets[1].data = chartData.holdingCost.slice(0, day);
+                costsChart.data.datasets[2].data = chartData.productionCost.slice(0, day);
+                costsChart.update('none');
+            }
+
+            // Update carbon chart
+            if (carbonChart) {
+                carbonChart.data.labels = chartData.days.slice(0, day);
+                carbonChart.data.datasets[0].data = chartData.carbonEmissions.slice(0, day);
+                carbonChart.update('none');
+            }
+
+            // Update demand chart
+            if (demandChart) {
+                demandChart.data.labels = chartData.days.slice(0, day);
+                demandChart.data.datasets[0].data = chartData.demandMultiplier.slice(0, day);
+                demandChart.update('none');
+            }
+
+            // Update utilization chart
+            if (utilizationChart) {
+                utilizationChart.data.labels = chartData.days.slice(0, day);
+                utilizationChart.data.datasets[0].data = chartData.utilization.slice(0, day);
+                utilizationChart.data.datasets[1].data = chartData.velocity.slice(0, day);
+                utilizationChart.update('none');
+            }
+
+            // Update quality chart
+            if (qualityChart) {
+                qualityChart.data.labels = chartData.days.slice(0, day);
+                qualityChart.data.datasets[0].data = chartData.lossRate.slice(0, day);
+                qualityChart.data.datasets[1].data = chartData.damageRate.slice(0, day);
+                qualityChart.update('none');
+            }
+
+            // Update KPI mini-charts
+            updateKPICharts(day);
+
+            // Update KPI values and indicators
+            updateKPIs(currentDay);
+        }
+
+        function updateKPICharts(day) {
+            const labels = chartData.days.slice(0, day);
+
+            // Helper to update a KPI chart
+            function updateKPIChart(chart, dataArray) {
+                if (chart) {
+                    chart.data.labels = labels;
+                    chart.data.datasets[0].data = dataArray.slice(0, day);
+                    chart.update('none');
+                }
+            }
+
+            updateKPIChart(kpiTcoChart, chartData.tco);
+            updateKPIChart(kpiCyclesChart, chartData.cyclesPerPackage);
+            updateKPIChart(kpiCo2Chart, chartData.co2Reduction);
+            updateKPIChart(kpiVelocityChart, chartData.velocity);
+            updateKPIChart(kpiLossChart, chartData.lossRate);
+            updateKPIChart(kpiUtilizationChart, chartData.utilization);
+            updateKPIChart(kpiDamageChart, chartData.damageRate);
+            updateKPIChart(kpiTrackingChart, chartData.trackingSuccess);
+        }
+
+        function updateKPIs(day) {
+            if (!chartData.tco || chartData.tco.length === 0) return;
+
+            const idx = Math.min(day, chartData.tco.length - 1);
+
+            // Get current values from chartData
+            const tco = chartData.tco[idx] || 0;
+            const cycles = chartData.cyclesPerPackage[idx] || 0;
+            const co2Reduction = chartData.co2Reduction[idx] || 0;
+            const velocity = chartData.velocity[idx] || 0;
+            const loss = chartData.lossRate[idx] || 0;
+            const util = chartData.utilization[idx] || 0;
+            const damage = chartData.damageRate[idx] || 0;
+            const tracking = chartData.trackingSuccess[idx] || 0;
+
+            // Update KPI displays
+            document.getElementById('kpi-tco').textContent = '$' + tco.toFixed(2);
+            document.getElementById('kpi-cycles').textContent = cycles.toFixed(1);
+            document.getElementById('kpi-co2').textContent = co2Reduction.toFixed(2);
+            document.getElementById('kpi-velocity').textContent = velocity.toFixed(1);
+            document.getElementById('kpi-loss').textContent = loss.toFixed(1) + '%';
+            document.getElementById('kpi-utilization').textContent = util.toFixed(1) + '%';
+            document.getElementById('kpi-damage').textContent = damage.toFixed(2) + '%';
+            document.getElementById('kpi-tracking').textContent = tracking.toFixed(1) + '%';
+
+            // Update change indicators (compare to 30 days ago)
+            const prevIdx = Math.max(0, idx - 30);
+
+            updateChangeIndicator('tco-change', chartData.tco[prevIdx], tco, true);
+            updateChangeIndicator('cycles-change', chartData.cyclesPerPackage[prevIdx], cycles, false);
+            updateChangeIndicator('co2-change', chartData.co2Reduction[prevIdx], co2Reduction, false);
+            updateChangeIndicator('velocity-change', chartData.velocity[prevIdx], velocity, false);
+            updateChangeIndicator('loss-change', chartData.lossRate[prevIdx], loss, true);
+            updateChangeIndicator('util-change', chartData.utilization[prevIdx], util, false);
+            updateChangeIndicator('damage-change', chartData.damageRate[prevIdx], damage, true);
+            updateChangeIndicator('tracking-change', chartData.trackingSuccess[prevIdx], tracking, false);
+        }
+
+        function updateChangeIndicator(elementId, prevValue, currentValue, invertPositive) {
+            const el = document.getElementById(elementId);
+            if (!el || !prevValue) return;
+
+            const change = ((currentValue - prevValue) / prevValue) * 100;
+            const isPositive = invertPositive ? change < 0 : change > 0;
+
+            el.textContent = (change >= 0 ? '+' : '') + change.toFixed(1) + '%';
+            el.className = 'kpi-change ' + (isPositive ? 'positive' : 'negative');
+        }
+
+        function setupSVG() {
+            svg = d3.select('#network-svg')
+                .attr('viewBox', '0 0 900 580');
+
+            // Background regions
+            const bgGroup = svg.append('g').attr('class', 'background');
+
+            bgGroup.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', 300)
+                .attr('height', 580)
+                .attr('fill', 'rgba(66, 153, 225, 0.05)');
+
+            bgGroup.append('rect')
+                .attr('x', 300)
+                .attr('y', 0)
+                .attr('width', 300)
+                .attr('height', 580)
+                .attr('fill', 'rgba(79, 195, 247, 0.05)');
+
+            bgGroup.append('rect')
+                .attr('x', 600)
+                .attr('y', 0)
+                .attr('width', 300)
+                .attr('height', 580)
+                .attr('fill', 'rgba(237, 100, 166, 0.05)');
+
+            // Region labels
+            bgGroup.append('text')
+                .attr('class', 'region-label')
+                .attr('x', 150)
+                .attr('y', 560)
+                .attr('text-anchor', 'middle')
+                .text('United States');
+
+            bgGroup.append('text')
+                .attr('class', 'region-label')
+                .attr('x', 450)
+                .attr('y', 560)
+                .attr('text-anchor', 'middle')
+                .text('Atlantic Ocean');
+
+            bgGroup.append('text')
+                .attr('class', 'region-label')
+                .attr('x', 750)
+                .attr('y', 560)
+                .attr('text-anchor', 'middle')
+                .text('Europe');
+
+            edgeGroup = svg.append('g').attr('class', 'edges');
+            packageGroup = svg.append('g').attr('class', 'packages');
+            nodeGroup = svg.append('g').attr('class', 'nodes');
+        }
+
+        function renderNetwork() {
+            // Render edges
+            simulationData.edges.forEach(edge => {
+                const source = nodePositions[edge.source];
+                const target = nodePositions[edge.target];
+
+                // Create curved path
+                const midX = (source.x + target.x) / 2;
+                const midY = (source.y + target.y) / 2;
+                const dx = target.x - source.x;
+                const dy = target.y - source.y;
+                const curveOffset = Math.min(30, Math.sqrt(dx * dx + dy * dy) / 4);
+
+                // Perpendicular offset for curve
+                const perpX = -dy / Math.sqrt(dx * dx + dy * dy) * curveOffset;
+                const perpY = dx / Math.sqrt(dx * dx + dy * dy) * curveOffset;
+
+                const pathData = `M ${source.x} ${source.y} Q ${midX + perpX} ${midY + perpY} ${target.x} ${target.y}`;
+
+                const edgeEl = edgeGroup.append('path')
+                    .attr('class', `edge ${edge.ocean ? 'edge-ocean' : 'edge-land'}`)
+                    .attr('d', pathData)
+                    .attr('id', `edge-${edge.source}-${edge.target}`);
+
+                edgeElements[`${edge.source}-${edge.target}`] = {
+                    element: edgeEl,
+                    path: pathData,
+                    source: edge.source,
+                    target: edge.target,
+                    ocean: edge.ocean
+                };
+            });
+
+            // Render nodes
+            Object.entries(simulationData.nodes).forEach(([id, node]) => {
+                const pos = nodePositions[id];
+                const color = nodeColors[node.type];
+
+                const g = nodeGroup.append('g')
+                    .attr('class', 'node-group')
+                    .attr('transform', `translate(${pos.x}, ${pos.y})`)
+                    .on('mouseenter', (event) => showTooltip(event, node, id))
+                    .on('mouseleave', hideTooltip);
+
+                // Node circle
+                g.append('circle')
+                    .attr('class', 'node-circle')
+                    .attr('r', 28)
+                    .attr('fill', color)
+                    .attr('fill-opacity', 0.2)
+                    .attr('stroke', color);
+
+                // Node icon
+                g.append('text')
+                    .attr('class', 'node-icon')
+                    .attr('y', -2)
+                    .text(node.icon);
+
+                // Node label
+                g.append('text')
+                    .attr('class', 'node-label')
+                    .attr('y', 45)
+                    .text(node.name.replace('EU ', '').replace('US ', ''));
+
+                // Inventory badge
+                const badge = g.append('g')
+                    .attr('class', 'inventory-badge')
+                    .attr('transform', 'translate(20, -20)');
+
+                badge.append('circle')
+                    .attr('r', 12)
+                    .attr('fill', '#1a1a2e')
+                    .attr('stroke', color)
+                    .attr('stroke-width', 2);
+
+                badge.append('text')
+                    .attr('class', 'node-inventory')
+                    .attr('id', `inventory-${id}`)
+                    .text('0');
+
+                nodeElements[id] = g;
+            });
+        }
+
+        function updateDisplay(day) {
+            if (!simulationData || day >= simulationData.daily_data.length) return;
+
+            const data = simulationData.daily_data[day];
+
+            // Update day display
+            document.getElementById('current-day').textContent = day;
+            document.getElementById('day-label').textContent = day;
+            document.getElementById('day-slider').value = day;
+
+            // Update season
+            const seasonEl = document.getElementById('current-season');
+            seasonEl.textContent = data.season.charAt(0).toUpperCase() + data.season.slice(1);
+            seasonEl.className = `season-indicator season-${data.season}`;
+
+            // Update metrics
+            document.getElementById('active-packages').textContent = data.active_packages;
+            document.getElementById('in-transit').textContent = data.in_transit;
+            document.getElementById('demand-mult').textContent = data.demand_multiplier.toFixed(1) + 'x';
+
+            // Update node inventories
+            Object.entries(data.node_inventories).forEach(([nodeId, count]) => {
+                const inventoryEl = document.getElementById(`inventory-${nodeId}`);
+                if (inventoryEl) {
+                    inventoryEl.textContent = count;
+                }
+            });
+
+            // Calculate cumulative costs up to this day
+            let totalTransport = 0, totalHolding = 0, totalProduction = 0;
+            for (let i = 0; i <= day; i++) {
+                const d = simulationData.daily_data[i];
+                totalTransport += d.transport_cost;
+                totalHolding += d.holding_cost;
+                totalProduction += d.production_cost;
+            }
+
+            document.getElementById('transport-cost').textContent = '$' + totalTransport.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            document.getElementById('holding-cost').textContent = '$' + totalHolding.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            document.getElementById('production-cost').textContent = '$' + totalProduction.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            document.getElementById('total-cost').textContent = '$' + (totalTransport + totalHolding + totalProduction).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+            // Calculate carbon
+            const carbonPerDollar = 0.5;
+            document.getElementById('carbon-emissions').textContent = Math.round(totalTransport * carbonPerDollar).toLocaleString() + ' kg';
+
+            // Spawn packages for flows
+            spawnPackages(data.flows);
+
+            // Update charts with current day indicator
+            updateCharts();
+        }
+
+        function spawnPackages(flows) {
+            // Clear existing packages
+            packageGroup.selectAll('.package').remove();
+            activePackages = [];
+
+            flows.forEach(flow => {
+                const edgeKey = `${flow.source}-${flow.target}`;
+                const edgeData = edgeElements[edgeKey];
+                if (!edgeData) return;
+
+                const pathEl = document.getElementById(`edge-${flow.source}-${flow.target}`);
+                if (!pathEl) return;
+
+                const pathLength = pathEl.getTotalLength();
+
+                // Spawn packages along the path
+                const numPackages = Math.min(flow.count, 5); // Cap at 5 for performance
+                for (let i = 0; i < numPackages; i++) {
+                    const offset = (i / numPackages) * 0.8 + Math.random() * 0.1;
+                    const point = pathEl.getPointAtLength(pathLength * offset);
+
+                    const pkg = packageGroup.append('g')
+                        .attr('class', 'package')
+                        .attr('transform', `translate(${point.x}, ${point.y})`);
+
+                    if (edgeData.ocean) {
+                        // Ship icon for ocean transport
+                        pkg.append('text')
+                            .attr('class', 'package-icon')
+                            .text('🚢');
+                    } else {
+                        // Custom plastic pallet SVG icon for land transport
+                        const palletGroup = pkg.append('g')
+                            .attr('transform', 'translate(-12, -10) scale(0.9)');
+
+                        // Pallet base runners (dark charcoal)
+                        palletGroup.append('rect')
+                            .attr('x', 0)
+                            .attr('y', 14)
+                            .attr('width', 26)
+                            .attr('height', 3)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#2d2d2d');
+
+                        // Top deck boards (dark gray HDPE plastic look)
+                        palletGroup.append('rect')
+                            .attr('x', 0)
+                            .attr('y', 0)
+                            .attr('width', 26)
+                            .attr('height', 3.5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#4a4a4a');
+
+                        palletGroup.append('rect')
+                            .attr('x', 0)
+                            .attr('y', 5)
+                            .attr('width', 26)
+                            .attr('height', 3.5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#5a5a5a');
+
+                        palletGroup.append('rect')
+                            .attr('x', 0)
+                            .attr('y', 10)
+                            .attr('width', 26)
+                            .attr('height', 3.5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#4a4a4a');
+
+                        // Support blocks/feet (darker)
+                        palletGroup.append('rect')
+                            .attr('x', 1)
+                            .attr('y', 14)
+                            .attr('width', 5)
+                            .attr('height', 5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#1a1a1a');
+
+                        palletGroup.append('rect')
+                            .attr('x', 10.5)
+                            .attr('y', 14)
+                            .attr('width', 5)
+                            .attr('height', 5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#1a1a1a');
+
+                        palletGroup.append('rect')
+                            .attr('x', 20)
+                            .attr('y', 14)
+                            .attr('width', 5)
+                            .attr('height', 5)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#1a1a1a');
+
+                        // Subtle highlight for 3D effect
+                        palletGroup.append('rect')
+                            .attr('x', 0)
+                            .attr('y', 0)
+                            .attr('width', 26)
+                            .attr('height', 1)
+                            .attr('rx', 0.5)
+                            .attr('fill', '#6b6b6b')
+                            .attr('opacity', 0.5);
+                    }
+
+                    activePackages.push({
+                        element: pkg,
+                        path: pathEl,
+                        pathLength: pathLength,
+                        progress: offset,
+                        speed: 0.002 + Math.random() * 0.001
+                    });
+                }
+            });
+        }
+
+        function animatePackages() {
+            activePackages.forEach(pkg => {
+                pkg.progress += pkg.speed;
+                if (pkg.progress >= 1) {
+                    pkg.progress = 0;
+                }
+                const point = pkg.path.getPointAtLength(pkg.pathLength * pkg.progress);
+                pkg.element.attr('transform', `translate(${point.x}, ${point.y})`);
+            });
+        }
+
+        function showTooltip(event, node, nodeId) {
+            const tooltip = document.getElementById('tooltip');
+            const data = simulationData.daily_data[currentDay];
+            const inventory = data.node_inventories[nodeId] || 0;
+
+            tooltip.innerHTML = `
+                <strong>${node.name}</strong><br>
+                Type: ${node.type}<br>
+                Region: ${node.region}<br>
+                Inventory: ${inventory} packages
+            `;
+
+            const rect = event.target.getBoundingClientRect();
+            const containerRect = document.querySelector('.canvas-container').getBoundingClientRect();
+
+            tooltip.style.left = (rect.left - containerRect.left + 40) + 'px';
+            tooltip.style.top = (rect.top - containerRect.top - 20) + 'px';
+            tooltip.classList.add('visible');
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+
+        function play() {
+            if (isPlaying) return;
+            isPlaying = true;
+            document.getElementById('play-btn').textContent = 'Pause';
+            document.getElementById('play-btn').classList.add('secondary');
+
+            animationInterval = setInterval(() => {
+                currentDay++;
+                if (currentDay >= simulationData.config.simulation_days) {
+                    currentDay = 0;
+                }
+                updateDisplay(currentDay);
+            }, animationSpeed);
+
+            // Package animation loop
+            requestAnimationFrame(function animate() {
+                if (isPlaying) {
+                    animatePackages();
+                    requestAnimationFrame(animate);
+                }
+            });
+        }
+
+        function pause() {
+            isPlaying = false;
+            document.getElementById('play-btn').textContent = 'Play';
+            document.getElementById('play-btn').classList.remove('secondary');
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+        }
+
+        function reset() {
+            pause();
+            currentDay = 0;
+            updateDisplay(0);
+        }
+
+        // Event listeners
+        document.getElementById('play-btn').addEventListener('click', () => {
+            if (isPlaying) {
+                pause();
+            } else {
+                play();
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', reset);
+
+        document.getElementById('speed-select').addEventListener('change', (e) => {
+            animationSpeed = parseInt(e.target.value);
+            if (isPlaying) {
+                pause();
+                play();
+            }
+        });
+
+        document.getElementById('day-slider').addEventListener('input', (e) => {
+            currentDay = parseInt(e.target.value);
+            updateDisplay(currentDay);
+        });
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
