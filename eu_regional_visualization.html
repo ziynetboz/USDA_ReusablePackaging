@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EU Multi-Echelon Distribution — RTP Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Outfit',sans-serif;background:#0f0d15;color:#e8e4df;min-height:100vh;overflow-x:hidden}
+.header{text-align:center;padding:18px 20px;background:linear-gradient(90deg,rgba(180,83,9,0.25),rgba(217,119,6,0.15),rgba(180,83,9,0.25));border-bottom:1px solid rgba(217,119,6,0.2)}
+.header h1{font-size:1.6em;font-weight:700;background:linear-gradient(135deg,#f59e0b,#ef4444,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{color:#78716c;font-size:0.82em;margin-top:2px}
+.main{display:flex;padding:16px;gap:16px;max-width:2000px;margin:0 auto}
+.sidebar{width:270px;flex-shrink:0;display:flex;flex-direction:column;gap:12px}
+.center{flex:1;display:flex;flex-direction:column;gap:14px}
+.charts-col{width:380px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 120px);overflow-y:auto}
+.charts-col::-webkit-scrollbar{width:4px}
+.charts-col::-webkit-scrollbar-thumb{background:rgba(217,119,6,0.3);border-radius:2px}
+.panel{background:rgba(28,25,23,0.85);border-radius:10px;padding:14px;border:1px solid rgba(120,113,108,0.2)}
+.panel h3{font-size:0.75em;text-transform:uppercase;letter-spacing:1px;color:#f59e0b;margin-bottom:10px;font-weight:600}
+.metric{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(120,113,108,0.15);font-size:0.85em}
+.metric:last-child{border-bottom:none}
+.metric-label{color:#78716c}.metric-value{font-family:'IBM Plex Mono',monospace;font-weight:600;color:#e8e4df}
+.metric-value.hl{color:#f59e0b}
+.canvas-container{flex:1;background:rgba(28,25,23,0.4);border-radius:10px;border:1px solid rgba(120,113,108,0.2);overflow:hidden;position:relative;min-height:520px}
+#network-svg{width:100%;height:540px;display:block}
+.control-row{display:flex;gap:8px;align-items:center}
+button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f0d15;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.85em;flex:1;transition:all 0.2s;font-family:'Outfit',sans-serif}
+button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(245,158,11,0.3)}
+button.sec{background:rgba(120,113,108,0.25);color:#e8e4df}
+select{background:rgba(120,113,108,0.15);color:#e8e4df;border:1px solid rgba(120,113,108,0.3);padding:6px 10px;border-radius:5px;font-size:0.85em;flex:1;font-family:'Outfit',sans-serif}
+select option{background:#0f0d15}
+input[type=range]{width:100%;accent-color:#f59e0b}
+.chart-panel{background:rgba(28,25,23,0.85);border-radius:10px;padding:12px;border:1px solid rgba(120,113,108,0.2)}
+.chart-panel h4{font-size:0.72em;text-transform:uppercase;letter-spacing:1px;color:#f59e0b;margin-bottom:8px;font-weight:600}
+.chart-wrap{height:110px;position:relative}
+.chart-wrap.tall{height:130px}
+.tooltip{position:absolute;background:rgba(15,13,21,0.95);color:#e8e4df;padding:10px 14px;border-radius:6px;font-size:0.8em;pointer-events:none;opacity:0;z-index:1000;max-width:220px;border:1px solid rgba(245,158,11,0.3)}
+.tooltip.vis{opacity:1}
+.season-tag{display:inline-block;padding:3px 10px;border-radius:14px;font-size:0.75em;font-weight:600}
+.season-high{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+.season-medium{background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f0d15}
+.season-low{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#0f0d15}
+.node-label{font-size:8.5px;fill:#78716c;text-anchor:middle;pointer-events:none;font-family:'Outfit',sans-serif}
+.node-inv{font-size:9px;font-weight:600;fill:#fff;text-anchor:middle;pointer-events:none;font-family:'IBM Plex Mono',monospace}
+.edge-forward{fill:none;stroke:rgba(120,113,108,0.2);stroke-width:1.5;stroke-linecap:round}
+.edge-wash{fill:none;stroke:rgba(6,182,212,0.3);stroke-width:1.8;stroke-dasharray:4,3}
+.edge-return{fill:none;stroke:rgba(245,158,11,0.15);stroke-width:1.2;stroke-dasharray:6,4}
+.edge-recirc{fill:none;stroke:rgba(139,92,246,0.2);stroke-width:1.5;stroke-dasharray:5,3}
+.region-label{font-size:12px;font-weight:700;fill:rgba(120,113,108,0.12);text-transform:uppercase;letter-spacing:3px;font-family:'Outfit',sans-serif}
+.loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#f59e0b;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:0.72em}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:10px 16px;background:rgba(28,25,23,0.6);border-bottom:1px solid rgba(120,113,108,0.15)}
+.kpi-card{background:rgba(41,37,36,0.6);border-radius:8px;padding:10px 12px;border:1px solid rgba(120,113,108,0.2)}
+.kpi-title{font-size:0.62em;text-transform:uppercase;letter-spacing:0.5px;color:#f59e0b;font-weight:600}
+.kpi-val{font-size:1.15em;font-weight:700;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.kpi-sub{font-size:0.58em;color:#78716c;margin-top:1px}
+.wash-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+.hygiene-bar{height:6px;border-radius:3px;background:rgba(120,113,108,0.15);overflow:hidden;margin-top:4px}
+.hygiene-fill{height:100%;border-radius:3px;transition:width 0.3s,background 0.3s}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>🇪🇺 EU Multi-Echelon Distribution with Washing/Reconditioning</h1>
+<p>Closed-loop RTP: Ports → Regional DCs → Retail → Collection → Wash Centers → Recirculate / Return to US</p>
+</div>
+<div class="kpi-row" id="kpi-row">
+<div class="kpi-card"><div class="kpi-title">💰 Total Cost</div><div class="kpi-val" id="kpi-cost">$0</div><div class="kpi-sub">cumulative</div></div>
+<div class="kpi-card"><div class="kpi-title">🧼 Washing Cost</div><div class="kpi-val" id="kpi-wash">$0</div><div class="kpi-sub">cumulative</div></div>
+<div class="kpi-card"><div class="kpi-title">🌱 CO₂ Emissions</div><div class="kpi-val" id="kpi-co2">0 kg</div><div class="kpi-sub">cumulative</div></div>
+<div class="kpi-card"><div class="kpi-title">📦 Active Fleet</div><div class="kpi-val" id="kpi-fleet">0</div><div class="kpi-sub">packages</div></div>
+<div class="kpi-card"><div class="kpi-title">🧫 Avg Hygiene</div><div class="kpi-val" id="kpi-hygiene">0%</div><div class="kpi-sub">cleanliness score</div></div>
+</div>
+<div class="main">
+<div class="sidebar">
+<div class="panel"><h3>Controls</h3>
+<div class="control-row"><button id="play-btn">▶ Play</button><button id="reset-btn" class="sec">↺ Reset</button></div>
+<div class="control-row" style="margin-top:8px"><label style="color:#78716c;font-size:0.8em;width:50px">Speed:</label>
+<select id="speed-sel"><option value="2000">0.5×</option><option value="1000" selected>1×</option><option value="500">2×</option><option value="200">5×</option><option value="100">10×</option></select></div>
+<div style="margin-top:8px"><label style="font-size:0.8em;color:#78716c">Day: <span id="day-lbl">0</span> / <span id="total-days">365</span></label>
+<input type="range" id="day-slider" min="0" max="364" value="0"></div>
+</div>
+<div class="panel"><h3>Status</h3>
+<div class="metric"><span class="metric-label">Day</span><span class="metric-value hl" id="cur-day">0</span></div>
+<div class="metric"><span class="metric-label">Season</span><span class="season-tag season-medium" id="cur-season">Medium</span></div>
+<div class="metric"><span class="metric-label">Active</span><span class="metric-value" id="s-active">60</span></div>
+<div class="metric"><span class="metric-label">In Transit</span><span class="metric-value" id="s-transit">0</span></div>
+<div class="metric"><span class="metric-label">EU Demand</span><span class="metric-value" id="s-demand">1.0×</span></div>
+<div class="metric"><span class="metric-label">Hygiene Score</span>
+<div style="flex:1;margin-left:10px">
+<div class="hygiene-bar"><div class="hygiene-fill" id="hygiene-bar" style="width:90%;background:#10b981"></div></div>
+</div></div>
+</div>
+<div class="panel"><h3>Costs</h3>
+<div class="metric"><span class="metric-label">Transport</span><span class="metric-value" id="c-transport">$0</span></div>
+<div class="metric"><span class="metric-label">Holding</span><span class="metric-value" id="c-holding">$0</span></div>
+<div class="metric"><span class="metric-label">Production</span><span class="metric-value" id="c-prod">$0</span></div>
+<div class="metric"><span class="metric-label"><span class="wash-indicator" style="background:#06b6d4"></span>Washing</span><span class="metric-value" style="color:#06b6d4" id="c-wash">$0</span></div>
+<div class="metric"><span class="metric-label">Total</span><span class="metric-value hl" id="c-total">$0</span></div>
+</div>
+<div class="panel"><h3>Network Legend</h3>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div><span>Entry Ports</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div><span>Regional DCs</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div><span>Wash Centers</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div><span>Retail Regions</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div><span>Collection Pts</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span>Exit Ports</span></div>
+<div class="legend-item"><div class="legend-dot" style="background:#10b981"></div><span>EU Pooler</span></div>
+</div></div>
+</div>
+<div class="center">
+<div class="canvas-container">
+<svg id="network-svg"></svg>
+<div class="tooltip" id="tooltip"></div>
+<div class="loading" id="loading"><div class="spinner"></div><p>Loading simulation data...</p></div>
+</div>
+</div>
+<div class="charts-col">
+<div class="chart-panel"><h4>Package Counts</h4><div class="chart-wrap tall"><canvas id="pkg-chart"></canvas></div></div>
+<div class="chart-panel"><h4>Cumulative Costs ($)</h4><div class="chart-wrap tall"><canvas id="cost-chart"></canvas></div></div>
+<div class="chart-panel"><h4>Carbon Emissions (kg CO₂)</h4><div class="chart-wrap"><canvas id="carbon-chart"></canvas></div></div>
+<div class="chart-panel"><h4>Demand Multiplier</h4><div class="chart-wrap"><canvas id="demand-chart"></canvas></div></div>
+<div class="chart-panel"><h4>Hygiene Score (%)</h4><div class="chart-wrap"><canvas id="hygiene-chart"></canvas></div></div>
+<div class="chart-panel"><h4>Washing Activity ($/day)</h4><div class="chart-wrap"><canvas id="wash-chart"></canvas></div></div>
+</div>
+</div>
+<script>
+// Node positions — European geographic layout
+const NP={
+1:{x:180,y:100},  // Port Rotterdam
+2:{x:340,y:80},   // Port Hamburg
+3:{x:200,y:200},  // DC North (NL/BE)
+4:{x:340,y:230},  // DC Central (DE/FR)
+5:{x:450,y:370},  // DC South (IT/ES)
+6:{x:100,y:310},  // Wash Center North
+7:{x:500,y:450},  // Wash Center South
+8:{x:120,y:180},  // Retail Benelux
+9:{x:380,y:150},  // Retail Germany
+10:{x:250,y:340}, // Retail France
+11:{x:500,y:300}, // Retail Italy
+12:{x:350,y:430}, // Retail Iberia
+13:{x:160,y:380}, // Collection North
+14:{x:320,y:340}, // Collection Central
+15:{x:460,y:490}, // Collection South
+16:{x:80,y:80},   // Exit Rotterdam
+17:{x:430,y:60},  // Exit Hamburg
+18:{x:290,y:480}  // EU Pooler
+};
+const NC={port:'#f59e0b',dc:'#3b82f6',wash:'#06b6d4',retail:'#ec4899',collect:'#a78bfa',exit_port:'#ef4444',pooler:'#10b981'};
+
+let simData=null,curDay=0,playing=false,anim=null,speed=1000,pkgs=[];
+let pkgChart,costChart,carbonChart,demandChart,hygieneChart,washChart;
+let cD={days:[],active:[],transit:[],retired:[],cumT:[],cumH:[],cumP:[],cumW:[],cumC:[],demand:[],hygiene:[],washDaily:[]};
+
+async function init(){
+try{const r=await fetch('eu_regional_simulation_data.json');simData=await r.json();
+document.getElementById('loading').style.display='none';
+document.getElementById('total-days').textContent=simData.config.simulation_days;
+document.getElementById('day-slider').max=simData.config.simulation_days-1;
+prepData();setupCharts();setupSVG();renderNet();updateDisplay(0)}
+catch(e){document.getElementById('loading').innerHTML='<p style="color:#f87171">Error loading data. Run python eu_regional_model.py first.</p>';console.error(e)}}
+
+function prepData(){
+cD={days:[],active:[],transit:[],retired:[],cumT:[],cumH:[],cumP:[],cumW:[],cumC:[],demand:[],hygiene:[],washDaily:[]};
+simData.daily_data.forEach((d,i)=>{
+cD.days.push(i);cD.active.push(d.active_packages);cD.transit.push(d.in_transit);
+cD.retired.push(d.retired);cD.demand.push(d.demand_multiplier);
+cD.hygiene.push((d.avg_hygiene||0)*100);cD.washDaily.push(d.washing_cost||0);
+cD.cumT.push(d.cum_transport||0);cD.cumH.push(d.cum_holding||0);
+cD.cumP.push(d.cum_production||0);cD.cumW.push(d.cum_washing||0);
+cD.cumC.push((d.cum_transport||0)*0.35)})}
+
+function setupCharts(){const td=simData.config.simulation_days;
+const opts={responsive:true,maintainAspectRatio:false,animation:false,
+plugins:{legend:{display:true,position:'top',labels:{color:'#78716c',font:{size:9,family:'Outfit'},boxWidth:10,padding:6}}},
+scales:{x:{display:true,grid:{color:'rgba(120,113,108,0.1)'},ticks:{color:'#78716c',font:{size:8},maxTicksLimit:6},min:0,max:td},
+y:{display:true,grid:{color:'rgba(120,113,108,0.1)'},ticks:{color:'#78716c',font:{size:8}},beginAtZero:true}}};
+
+const mk=(id,ds,ym)=>{const o=JSON.parse(JSON.stringify(opts));if(ym)o.scales.y.max=ym;
+return new Chart(document.getElementById(id),{type:'line',data:{labels:[],datasets:ds.map(d=>({...d,data:[],pointRadius:0,borderWidth:2}))},options:o})};
+
+pkgChart=mk('pkg-chart',[
+{label:'Active',borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,0.1)',fill:true},
+{label:'Transit',borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true},
+{label:'Retired',borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.1)',fill:true}
+],Math.max(...cD.active,...cD.retired)*1.1);
+
+costChart=mk('cost-chart',[
+{label:'Transport',borderColor:'#f59e0b',fill:false},
+{label:'Holding',borderColor:'#a78bfa',fill:false},
+{label:'Production',borderColor:'#10b981',fill:false},
+{label:'Washing',borderColor:'#06b6d4',fill:false}
+],Math.max(...cD.cumT,...cD.cumH,...cD.cumP,...cD.cumW)*1.1);
+
+const co=JSON.parse(JSON.stringify(opts));co.plugins.legend.display=false;co.scales.y.max=Math.max(...cD.cumC)*1.1;
+carbonChart=new Chart(document.getElementById('carbon-chart'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.12)',fill:true,pointRadius:0,borderWidth:2}]},options:co});
+
+const do2=JSON.parse(JSON.stringify(opts));do2.plugins.legend.display=false;do2.scales.y.max=Math.max(...cD.demand)*1.3;
+demandChart=new Chart(document.getElementById('demand-chart'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#ec4899',backgroundColor:'rgba(236,72,153,0.12)',fill:true,pointRadius:0,borderWidth:2}]},options:do2});
+
+const ho=JSON.parse(JSON.stringify(opts));ho.plugins.legend.display=false;ho.scales.y.max=100;ho.scales.y.min=0;
+hygieneChart=new Chart(document.getElementById('hygiene-chart'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,0.12)',fill:true,pointRadius:0,borderWidth:2}]},options:ho});
+
+const wo=JSON.parse(JSON.stringify(opts));wo.plugins.legend.display=false;wo.scales.y.max=Math.max(...cD.washDaily)*1.3;
+washChart=new Chart(document.getElementById('wash-chart'),{type:'line',data:{labels:[],datasets:[{data:[],borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,0.12)',fill:true,pointRadius:0,borderWidth:2}]},options:wo})}
+
+function updateCharts(){const d=curDay+1;const l=cD.days.slice(0,d);
+pkgChart.data.labels=l;pkgChart.data.datasets[0].data=cD.active.slice(0,d);pkgChart.data.datasets[1].data=cD.transit.slice(0,d);pkgChart.data.datasets[2].data=cD.retired.slice(0,d);pkgChart.update('none');
+costChart.data.labels=l;costChart.data.datasets[0].data=cD.cumT.slice(0,d);costChart.data.datasets[1].data=cD.cumH.slice(0,d);costChart.data.datasets[2].data=cD.cumP.slice(0,d);costChart.data.datasets[3].data=cD.cumW.slice(0,d);costChart.update('none');
+carbonChart.data.labels=l;carbonChart.data.datasets[0].data=cD.cumC.slice(0,d);carbonChart.update('none');
+demandChart.data.labels=l;demandChart.data.datasets[0].data=cD.demand.slice(0,d);demandChart.update('none');
+hygieneChart.data.labels=l;hygieneChart.data.datasets[0].data=cD.hygiene.slice(0,d);hygieneChart.update('none');
+washChart.data.labels=l;washChart.data.datasets[0].data=cD.washDaily.slice(0,d);washChart.update('none')}
+
+let svg,edgeG,nodeG,pkgG,nodeEls={},edgeEls={};
+function setupSVG(){svg=d3.select('#network-svg').attr('viewBox','0 0 600 560');
+const bg=svg.append('g');
+// Region backgrounds
+bg.append('rect').attr('x',0).attr('y',0).attr('width',250).attr('height',250).attr('rx',8).attr('fill','rgba(245,158,11,0.025)');
+bg.append('rect').attr('x',250).attr('y',0).attr('width',350).attr('height',250).attr('rx',8).attr('fill','rgba(59,130,246,0.025)');
+bg.append('rect').attr('x',0).attr('y',250).attr('width',300).attr('height',310).attr('rx',8).attr('fill','rgba(6,182,212,0.03)');
+bg.append('rect').attr('x',300).attr('y',250).attr('width',300).attr('height',310).attr('rx',8).attr('fill','rgba(236,72,153,0.025)');
+// Region labels
+bg.append('text').attr('class','region-label').attr('x',125).attr('y',35).attr('text-anchor','middle').text('North');
+bg.append('text').attr('class','region-label').attr('x',420).attr('y',35).attr('text-anchor','middle').text('Central & East');
+bg.append('text').attr('class','region-label').attr('x',150).attr('y',540).attr('text-anchor','middle').text('Wash & Return');
+bg.append('text').attr('class','region-label').attr('x',450).attr('y',540).attr('text-anchor','middle').text('South & Iberia');
+edgeG=svg.append('g');pkgG=svg.append('g');nodeG=svg.append('g')}
+
+function getEdgeClass(src,tgt){
+// wash center edges
+if([6,7].includes(tgt)) return 'edge-wash';
+// exit/return edges
+if([16,17].includes(src) || [16,17].includes(tgt)) return 'edge-return';
+// recirculation from pooler
+if(src===18 && [3,4,5].includes(tgt)) return 'edge-recirc';
+return 'edge-forward'}
+
+function renderNet(){
+simData.edges.forEach(e=>{const s=NP[e.source],t=NP[e.target];if(!s||!t)return;
+const mx=(s.x+t.x)/2,my=(s.y+t.y)/2,dx=t.x-s.x,dy=t.y-s.y,l=Math.sqrt(dx*dx+dy*dy)||1;
+const off=Math.min(18,l/5),px=-dy/l*off,py=dx/l*off;
+const path=`M ${s.x} ${s.y} Q ${mx+px} ${my+py} ${t.x} ${t.y}`;
+const cls=getEdgeClass(e.source,e.target);
+const el=edgeG.append('path').attr('class',cls).attr('d',path).attr('id',`e-${e.source}-${e.target}`);
+edgeEls[`${e.source}-${e.target}`]={el,path,source:e.source,target:e.target}});
+
+Object.entries(simData.nodes).forEach(([id,n])=>{const p=NP[id];if(!p)return;const c=NC[n.type]||'#78716c';
+const g=nodeG.append('g').attr('transform',`translate(${p.x},${p.y})`).style('cursor','pointer')
+.on('mouseenter',ev=>showTip(ev,n,id)).on('mouseleave',hideTip);
+// Glow for wash centers
+if(n.type==='wash'){
+g.append('circle').attr('r',28).attr('fill',c).attr('fill-opacity',0.08).attr('stroke','none');
+}
+g.append('circle').attr('r',20).attr('fill',c).attr('fill-opacity',0.15).attr('stroke',c).attr('stroke-width',2);
+g.append('text').attr('y',-1).attr('text-anchor','middle').attr('dominant-baseline','central').attr('font-size','16px').attr('pointer-events','none').text(n.icon);
+g.append('text').attr('class','node-label').attr('y',34).text(n.name.replace('Retail ','').replace('DC ','').replace('Collection ','Coll ').replace('Wash Center ','Wash ').replace('Exit ','Exit ').replace('Port ',''));
+const b=g.append('g').attr('transform','translate(14,-14)');b.append('circle').attr('r',9).attr('fill','#0f0d15').attr('stroke',c).attr('stroke-width',1.5);
+b.append('text').attr('class','node-inv').attr('id',`inv-${id}`).text('0');nodeEls[id]=g})}
+
+function updateDisplay(day){if(!simData||day>=simData.daily_data.length)return;const d=simData.daily_data[day];
+document.getElementById('cur-day').textContent=day;document.getElementById('day-lbl').textContent=day;document.getElementById('day-slider').value=day;
+const se=document.getElementById('cur-season');
+const smap={high:'High Demand',medium:'Medium',low:'Low Demand'};
+se.textContent=smap[d.season]||d.season;se.className='season-tag season-'+d.season;
+document.getElementById('s-active').textContent=d.active_packages;
+document.getElementById('s-transit').textContent=d.in_transit;
+document.getElementById('s-demand').textContent=d.demand_multiplier.toFixed(1)+'×';
+Object.entries(d.node_inventories).forEach(([n,c])=>{const el=document.getElementById(`inv-${n}`);if(el)el.textContent=c});
+
+const fmt=v=>'$'+Math.round(v).toLocaleString();
+const ct=d.cum_transport||0,ch=d.cum_holding||0,cp=d.cum_production||0,cw=d.cum_washing||0,cr=d.cum_repair||0;
+document.getElementById('c-transport').textContent=fmt(ct);
+document.getElementById('c-holding').textContent=fmt(ch);
+document.getElementById('c-prod').textContent=fmt(cp);
+document.getElementById('c-wash').textContent=fmt(cw);
+document.getElementById('c-total').textContent=fmt(ct+ch+cp+cw+cr);
+document.getElementById('kpi-cost').textContent=fmt(ct+ch+cp+cw+cr);
+document.getElementById('kpi-wash').textContent=fmt(cw);
+document.getElementById('kpi-co2').textContent=Math.round(ct*0.35)+' kg';
+document.getElementById('kpi-fleet').textContent=d.active_packages;
+const hyg=(d.avg_hygiene||0)*100;
+document.getElementById('kpi-hygiene').textContent=hyg.toFixed(1)+'%';
+// Update hygiene bar
+const hbar=document.getElementById('hygiene-bar');
+hbar.style.width=hyg+'%';
+hbar.style.background=hyg>80?'#10b981':hyg>60?'#f59e0b':'#ef4444';
+
+spawnPkgs(d.flows);updateCharts()}
+
+function spawnPkgs(flows){pkgG.selectAll('.pkg').remove();pkgs=[];
+flows.forEach(f=>{const k=`${f.source}-${f.target}`,ed=edgeEls[k];if(!ed)return;
+const pe=document.getElementById(`e-${f.source}-${f.target}`);if(!pe)return;
+const pl=pe.getTotalLength(),num=Math.min(f.count,4);
+for(let i=0;i<num;i++){const off=i/num*0.8+Math.random()*0.1,pt=pe.getPointAtLength(pl*off);
+const g=pkgG.append('g').attr('class','pkg').attr('transform',`translate(${pt.x},${pt.y})`);
+// Different icons for wash vs normal
+const isWash=[6,7].includes(f.target);
+if(isWash){
+g.append('circle').attr('r',5).attr('fill','#06b6d4').attr('opacity',0.8);
+g.append('circle').attr('r',3).attr('fill','#0891b2');
+}else{
+g.append('rect').attr('x',-5).attr('y',-4).attr('width',10).attr('height',8).attr('rx',1.5).attr('fill','#f59e0b').attr('opacity',0.8);
+g.append('rect').attr('x',-4).attr('y',-3).attr('width',8).attr('height',2.5).attr('rx',1).attr('fill','#d97706');
+}
+pkgs.push({el:g,path:pe,pl,progress:off,spd:0.002+Math.random()*0.001})}})}
+
+function animPkgs(){pkgs.forEach(p=>{p.progress+=p.spd;if(p.progress>=1)p.progress=0;
+const pt=p.path.getPointAtLength(p.pl*p.progress);p.el.attr('transform',`translate(${pt.x},${pt.y})`)})}
+
+function showTip(ev,n,id){const tip=document.getElementById('tooltip'),d=simData.daily_data[curDay];
+let extra='';
+if(n.type==='wash') extra='<br>🧼 Active washing facility';
+if(n.type==='collect') extra='<br>♻️ Collection point';
+tip.innerHTML=`<strong>${n.name}</strong><br>Type: ${n.type}<br>Region: ${n.region}<br>Inventory: ${d.node_inventories[id]||0}${extra}`;
+const r=ev.target.getBoundingClientRect(),cr=document.querySelector('.canvas-container').getBoundingClientRect();
+tip.style.left=(r.left-cr.left+30)+'px';tip.style.top=(r.top-cr.top-10)+'px';tip.classList.add('vis')}
+function hideTip(){document.getElementById('tooltip').classList.remove('vis')}
+
+function play(){if(playing)return;playing=true;document.getElementById('play-btn').textContent='⏸ Pause';
+anim=setInterval(()=>{curDay++;if(curDay>=simData.config.simulation_days)curDay=0;updateDisplay(curDay)},speed);
+requestAnimationFrame(function loop(){if(playing){animPkgs();requestAnimationFrame(loop)}})}
+function pause(){playing=false;document.getElementById('play-btn').textContent='▶ Play';if(anim){clearInterval(anim);anim=null}}
+function reset(){pause();curDay=0;updateDisplay(0)}
+
+document.getElementById('play-btn').addEventListener('click',()=>playing?pause():play());
+document.getElementById('reset-btn').addEventListener('click',reset);
+document.getElementById('speed-sel').addEventListener('change',e=>{speed=parseInt(e.target.value);if(playing){pause();play()}});
+document.getElementById('day-slider').addEventListener('input',e=>{curDay=parseInt(e.target.value);updateDisplay(curDay)});
+init();
+</script>
+</body>
+</html>
