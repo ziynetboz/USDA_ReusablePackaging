@@ -58,3 +58,7 @@ htmlcov/
 node_modules/
 npm-debug.log
 yarn-error.log
+
+# Local duplicate script copies
+eu_regional_model copy.py
+hub_spoke_model copy.py
